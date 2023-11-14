@@ -1,93 +1,201 @@
 package com.core.walletservice.services.impl;
 
-import com.core.walletservice.dto.GetWalletRequest;
+import com.core.walletservice.dto.TransactionDTO;
 import com.core.walletservice.dto.TransactionRequest;
 import com.core.walletservice.dto.TransactionResponse;
 import com.core.walletservice.entity.Transaction;
 import com.core.walletservice.entity.Wallet;
-import com.core.walletservice.exceptions.EntityNotFoundException;
-import com.core.walletservice.exceptions.InsufficientFundsException;
+import com.core.walletservice.enums.TransactionType;
+import com.core.walletservice.exceptions.BadRequestException;
+import com.core.walletservice.exceptions.InternalErrorException;
+import com.core.walletservice.exceptions.NotFoundException;
 import com.core.walletservice.repositories.TransactionRepository;
+import com.core.walletservice.repositories.WalletRepository;
 import com.core.walletservice.services.TransactionService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Service
 public class TransactionServiceImpl implements TransactionService {
 
-    private final WalletServiceImpl walletServiceImpl;
-    private final TransactionRepository transactionRepository;
+    private final  TransactionRepository transactionRepo;
 
-    @Autowired
-    public TransactionServiceImpl(WalletServiceImpl walletServiceImpl, TransactionRepository transactionRepository) {
-        this.walletServiceImpl = walletServiceImpl;
-        this.transactionRepository = transactionRepository;
+    private final WalletRepository walletRepo;
+
+    private final MongoTemplate mongoTemplate;
+
+    private final KafkaTemplate<String, TransactionDTO> kafkaTemplate;
+
+    public TransactionServiceImpl(TransactionRepository transactionRepo, WalletRepository walletRepo, MongoTemplate mongoTemplate, KafkaTemplate<String, TransactionDTO> kafkaTemplate) {
+        this.transactionRepo = transactionRepo;
+        this.walletRepo = walletRepo;
+        this.mongoTemplate = mongoTemplate;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
-    @Override
     @Transactional
-    public TransactionResponse deposit(TransactionRequest transactionRequest) throws EntityNotFoundException {
+    public TransactionResponse deposit(TransactionRequest transactionRequest) {
         if (transactionRequest.getAmount() <= 0) {
-            throw new IllegalArgumentException("Invalid amount for deposit.");
+            throw new BadRequestException("Invalid amount");
         }
 
-        // Create GetWalletRequest from TransactionRequest
-        GetWalletRequest getWalletRequest = new GetWalletRequest();
-        getWalletRequest.setUsername(transactionRequest.getUsername());
+        try {
+            Instant start = Instant.now();
 
-        Wallet wallet = walletServiceImpl.updateWalletBalance(
-                transactionRequest.getUsername(),
-                walletServiceImpl.getBalance(getWalletRequest).getBalance() + transactionRequest.getAmount()
-        );
+            Wallet userWallet = walletRepo.findByUsername(transactionRequest.getUsername());
+            if(userWallet==null) {
+                  throw new NotFoundException("Wallet not found");
+            }
+            double walletAmountBefore = userWallet.getBalance();
+            double walletAmountAfter = walletAmountBefore + transactionRequest.getAmount();
 
-        Transaction transaction = new Transaction();
-        transaction.setUsername(wallet.getUsername());
-        transaction.setAction("DEPOSIT");
-        transaction.setAmount(transactionRequest.getAmount());
-        transaction.setBeforeBalance(wallet.getBalance() - transactionRequest.getAmount());
-        transaction.setAfterBalance(wallet.getBalance());
-        transaction.setTimestamp(LocalDateTime.now());
+            checkRecentTransaction(transactionRequest.getUsername(), "deposit", transactionRequest.getAmount());
 
-        transactionRepository.save(transaction);
+            Transaction financeTransaction = createAndSaveTransaction(TransactionType.DEPOSIT.getValue(), transactionRequest,
+                    walletAmountBefore, userWallet);
 
-        return new TransactionResponse(wallet.getUsername(), transactionRequest.getAmount(), wallet.getBalance() - transactionRequest.getAmount(), wallet.getBalance(), transaction.getId());
+            processTransaction("deposit", walletAmountBefore, transactionRequest.getAmount(),
+                    walletAmountAfter, financeTransaction.getId().toString(), "", "", userWallet.getRefSale(),
+                    userWallet.getUsername(), userWallet.getUpline(), "withdrawal", "", false, true);
+
+            userWallet.setBalance(walletAmountAfter);
+            walletRepo.save(userWallet);
+
+            Instant end = Instant.now();
+            System.out.println("Deposit transaction time: " + Duration.between(start, end));
+
+            return createTransactionResponse(userWallet, walletAmountBefore, walletAmountAfter, financeTransaction);
+        } catch (Exception e) {
+            throw new InternalErrorException("Failed to deposit", e);
+        }
     }
 
-    @Override
     @Transactional
-    public TransactionResponse withdraw(TransactionRequest transactionRequest) throws EntityNotFoundException, InsufficientFundsException {
+    public TransactionResponse withdraw(TransactionRequest transactionRequest) {
         if (transactionRequest.getAmount() <= 0) {
-            throw new IllegalArgumentException("Invalid amount for withdrawal.");
+            throw new BadRequestException("Invalid amount");
         }
 
-        // Create GetWalletRequest from TransactionRequest
-        GetWalletRequest getWalletRequest = new GetWalletRequest();
-        getWalletRequest.setUsername(transactionRequest.getUsername());
+        try {
+            Instant start = Instant.now();
 
-        Wallet wallet = walletServiceImpl.getBalance(getWalletRequest).toWallet();
+            Wallet userWallet = walletRepo.findByUsername(transactionRequest.getUsername());
+                    if(userWallet==null) {
+                    throw new NotFoundException("Wallet not found");
+                    }
 
-        if (wallet.getBalance() < transactionRequest.getAmount()) {
-            throw new InsufficientFundsException("Insufficient funds for withdrawal.");
+            double walletAmountBefore = userWallet.getBalance();
+            double walletAmountAfter = walletAmountBefore - transactionRequest.getAmount();
+
+            if (walletAmountBefore < transactionRequest.getAmount()) {
+                throw new BadRequestException("Insufficient Funds");
+            }
+
+            checkRecentTransaction(transactionRequest.getUsername(), "withdraw", transactionRequest.getAmount());
+
+            Transaction financeTransaction = createAndSaveTransaction(TransactionType.WITHDRAW.getValue(), transactionRequest,
+                    walletAmountBefore, userWallet);
+
+            processTransaction("withdraw", walletAmountBefore, transactionRequest.getAmount(),
+                    walletAmountAfter, financeTransaction.getId().toString(), "", "", userWallet.getRefSale(),
+                    userWallet.getUsername(), userWallet.getUpline(), "withdrawal", "", false, true);
+
+            userWallet.setBalance(walletAmountAfter);
+            walletRepo.save(userWallet);
+
+            Instant end = Instant.now();
+            System.out.println("Withdraw transaction time: " + Duration.between(start, end));
+
+            return createTransactionResponse(userWallet, walletAmountBefore, walletAmountAfter, financeTransaction);
+        } catch (Exception e) {
+            throw new InternalErrorException("Failed to withdraw", e);
         }
+    }
 
-        wallet = walletServiceImpl.updateWalletBalance(
-                transactionRequest.getUsername(),
-                wallet.getBalance() - transactionRequest.getAmount()
-        );
+    private void checkRecentTransaction(String username, String action, double amount) {
+        Transaction recentTx = transactionRepo.findRecentTransaction(username, action, amount);
+        if (recentTx != null) {
+            Duration diff = Duration.between(recentTx.getCreatedAt(), Instant.now());
+            if (diff.toMinutes() < 2) {
+                throw new BadRequestException("Please wait 2 minutes between transactions");
+            }
+        }
+    }
 
+    private Transaction createAndSaveTransaction(String type, TransactionRequest transactionRequest, double walletAmountBefore, Wallet userWallet) {
         Transaction transaction = new Transaction();
-        transaction.setUsername(wallet.getUsername());
-        transaction.setAction("WITHDRAW");
+        transaction.setType(TransactionType.valueOf(type));
         transaction.setAmount(transactionRequest.getAmount());
-        transaction.setBeforeBalance(wallet.getBalance() + transactionRequest.getAmount());
-        transaction.setAfterBalance(wallet.getBalance());
-        transaction.setTimestamp(LocalDateTime.now());
+        transaction.setAfterBalance(walletAmountBefore);
+        transaction.setUsername(userWallet.getUsername());
+        transaction.setUpline(userWallet.getUpline());
+        transaction.setCreatedBy("DarkestKnight");
+        transaction.setRemark(transactionRequest.getRemark());
+        transaction.setRefID(transactionRequest.getRefId());
+        transaction.setCreatedAt(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
+        transaction.setUpdatedAt(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
+        return transactionRepo.save(transaction);
+    }
 
-        transactionRepository.save(transaction);
+    private void processTransaction(String actionType, double beforeBalance, double amount, double afterBalance,
+                                    String roundId, String gameId, String gameName, String refSale, String username,
+                                    String upline, String productId, String description, boolean isFeatureBuy,
+                                    boolean isEndRound) {
+        TransactionDTO transactionDTO = new TransactionDTO();
+        transactionDTO.setActionType(actionType);
+        transactionDTO.setAction(actionType);
 
-        return new TransactionResponse(wallet.getUsername(), transactionRequest.getAmount(), wallet.getBalance() + transactionRequest.getAmount(), wallet.getBalance(), transaction.getId());
+        if (isEndRound && actionType.equals("payIn")) {
+            transactionDTO.setEndRound(true);
+        }
+
+        if (productId.equals("withdrawal") || actionType.equals("transferOut") || actionType.equals("transferIn")) {
+            transactionDTO.setProductName(productId);
+            transactionDTO.setGameCategory("");
+            transactionDTO.setProvider(productId);
+            transactionDTO.setPercentage(100.0);
+        }
+
+        transactionDTO.setBeforeBalance(beforeBalance);
+        transactionDTO.setAmount(amount);
+        transactionDTO.setAfterBalance(afterBalance);
+        transactionDTO.setUsername(username);
+        transactionDTO.setRoundID(roundId);
+        transactionDTO.setGameID(gameId);
+        transactionDTO.setGameName(gameName);
+        transactionDTO.setFeatureBuy(isFeatureBuy);
+        transactionDTO.setEndRound(isEndRound);
+        transactionDTO.setUpline(upline);
+        transactionDTO.setRefSale(refSale);
+        transactionDTO.setDescription(description);
+
+        transactionDTO.setProductID(productId);
+        transactionDTO.setCreatedAtIso(Instant.now().toString());
+        transactionDTO.setCreatedAt(Instant.now().toString());
+
+        transactionDTO.setCreated(Instant.now().toString());
+        transactionDTO.setFRunning(false);
+        transactionDTO.setFRunningDate("");
+
+        kafkaTemplate.send("transaction", transactionDTO);
+    }
+
+    private TransactionResponse createTransactionResponse(Wallet userWallet, double walletAmountBefore,
+                                                          double walletAmountAfter, Transaction financeTransaction) {
+        return new TransactionResponse(
+                userWallet.getToken(),
+                userWallet.getUsername(),
+                walletAmountAfter,
+                walletAmountBefore,
+                walletAmountAfter,
+                financeTransaction.getId()
+        );
     }
 }

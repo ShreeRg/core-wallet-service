@@ -1,35 +1,32 @@
 package com.core.walletservice.entity;
 
+import com.core.walletservice.enums.TransactionType;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Document(collection = "Transaction")
+@Document("transactions")
 public class Transaction {
-
+    @Id
     private String id;
-    private String username;
-    private String action;
+    private TransactionType type;
     private double amount;
-    private double beforeBalance;
     private double afterBalance;
-    private LocalDateTime timestamp;
-
-    // Default constructor
-    public Transaction() {
-    }
-
-    // Constructor with all fields
-    public Transaction(String username, String action, double amount, double beforeBalance, double afterBalance, LocalDateTime timestamp) {
-        this.username = username;
-        this.action = action;
-        this.amount = amount;
-        this.beforeBalance = beforeBalance;
-        this.afterBalance = afterBalance;
-        this.timestamp = timestamp;
-    }
+    private String username;
+    private String upline;
+    private String createdBy;
+    private String timestamp;
+    private String hstamp;
+    private String remark;
+    private String refID;
+    private String IP;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     // Getters and setters
+
+
     public String getId() {
         return id;
     }
@@ -38,20 +35,12 @@ public class Transaction {
         this.id = id;
     }
 
-    public String getUsername() {
-        return username;
+    public TransactionType getType() {
+        return type;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
+    public void setType(TransactionType type) {
+        this.type = type;
     }
 
     public double getAmount() {
@@ -62,14 +51,6 @@ public class Transaction {
         this.amount = amount;
     }
 
-    public double getBeforeBalance() {
-        return beforeBalance;
-    }
-
-    public void setBeforeBalance(double beforeBalance) {
-        this.beforeBalance = beforeBalance;
-    }
-
     public double getAfterBalance() {
         return afterBalance;
     }
@@ -78,13 +59,83 @@ public class Transaction {
         this.afterBalance = afterBalance;
     }
 
-    public LocalDateTime getTimestamp() {
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getUpline() {
+        return upline;
+    }
+
+    public void setUpline(String upline) {
+        this.upline = upline;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getTimestamp() {
         return timestamp;
     }
 
-    public void setTimestamp(LocalDateTime timestamp) {
+    public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
     }
 
-    // Additional methods as required...
+    public String getHstamp() {
+        return hstamp;
+    }
+
+    public void setHstamp(String hstamp) {
+        this.hstamp = hstamp;
+    }
+
+    public String getRemark() {
+        return remark;
+    }
+
+    public void setRemark(String remark) {
+        this.remark = remark;
+    }
+
+    public String getRefID() {
+        return refID;
+    }
+
+    public void setRefID(String refID) {
+        this.refID = refID;
+    }
+
+    public String getIP() {
+        return IP;
+    }
+
+    public void setIP(String IP) {
+        this.IP = IP;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
 }

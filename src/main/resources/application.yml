@@ -1,6 +1,9 @@
 server:
   port: 8082
 spring:
+  kafka:
+    producer:
+      bootstrap-servers: 9092:9092
   data:
     mongodb:
       host: localhost           # MongoDB server hostname or IP address

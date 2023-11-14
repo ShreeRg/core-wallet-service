@@ -9,7 +9,14 @@ public class TransactionResponse {
     private Double walletAmountAfter;
     private String txId;
 
-    public TransactionResponse(String username, Double amount, double v, double balance, String id) {
+
+    public TransactionResponse(String token, String username, Double wallet, Double walletAmountBefore, Double walletAmountAfter, String txId) {
+        this.token = token;
+        this.username = username;
+        this.wallet = wallet;
+        this.walletAmountBefore = walletAmountBefore;
+        this.walletAmountAfter = walletAmountAfter;
+        this.txId = txId;
     }
 
     // Getters and setters

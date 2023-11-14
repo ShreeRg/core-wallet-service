@@ -2,38 +2,35 @@ package com.core.walletservice.entity;
 
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.util.Date;
 import java.util.UUID;
 
 @Document(collection = "wallet")
 public class Wallet {
-
-    private final UUID id; // Assuming the ID is of type UUID for database identity
+    private String id; // Assuming you use a String representation for ObjectID
+    private String token;
     private String username;
     private double balance;
-    private String type; // e.g., "personal", "business"
-    private String upline; // Reference to the entity that introduced the user
-    private String refSale; // Reference to the sales entity or code
+    private String type;// UserType
+    private String refSale;
+    private String upline;
+    private Date createdAt;
+    private Date updatedAt;
 
-    // Add other fields that are relevant to your application
-
-    // Constructors
-    public Wallet() {
-        this.id = UUID.randomUUID(); // Automatically generate ID
-    }
-
-    public Wallet(String username, double balance, String type, String upline, String refSale) {
-        this.id = UUID.randomUUID();
-        this.username = username;
-        this.balance = balance;
-        this.type = type;
-        this.upline = upline;
-        this.refSale = refSale;
-    }
-
-    // Getters and setters for all fields
-
-    public UUID getId() {
+    public String getId() {
         return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
     }
 
     public String getUsername() {
@@ -48,8 +45,8 @@ public class Wallet {
         return balance;
     }
 
-    public void setBalance(double newBalance) {
-        this.balance = newBalance;
+    public void setBalance(double balance) {
+        this.balance = balance;
     }
 
     public String getType() {
@@ -60,14 +57,6 @@ public class Wallet {
         this.type = type;
     }
 
-    public String getUpline() {
-        return upline;
-    }
-
-    public void setUpline(String upline) {
-        this.upline = upline;
-    }
-
     public String getRefSale() {
         return refSale;
     }
@@ -76,24 +65,27 @@ public class Wallet {
         this.refSale = refSale;
     }
 
-    // Other methods, such as for depositing or withdrawing money, may also be included
-
-    // Example toString() method
-    @Override
-    public String toString() {
-        return "Wallet{" +
-                "id=" + id +
-                ", username='" + username + '\'' +
-                ", balance=" + balance +
-                ", type='" + type + '\'' +
-                ", upline='" + upline + '\'' +
-                ", refSale='" + refSale + '\'' +
-                // Include other fields in the string representation
-                '}';
+    public String getUpline() {
+        return upline;
     }
 
-    public void setToken(String token) {
+    public void setUpline(String upline) {
+        this.upline = upline;
     }
 
-    // hashCode, equals, and other utility methods if needed
+    public Date getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Date getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Date updatedAt) {
+        this.updatedAt = updatedAt;
+    }
 }
